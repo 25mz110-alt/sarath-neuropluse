@@ -655,10 +655,8 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // --- BLE & CHART LOGIC ---
-        const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-        const CHARACTERISTIC_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
-
+        // --- WIFI & CHART LOGIC ---
+        let socket;
         let ecgHistory = Array(150).fill(0);
         const ecgCtx = document.getElementById('ecgChart').getContext('2d');
         const ecgChart = new Chart(ecgCtx, {
@@ -687,44 +685,58 @@
             }
         });
 
-        document.getElementById('connectBtn').addEventListener('click', async () => {
-            if (!navigator.bluetooth) {
-                alert("Bluetooth is blocked! \n\n1. Use Chrome or Edge browser.\n2. Ensure the link starts with https:// (GitHub Pages).\n3. Local files (file://) cannot use Bluetooth.");
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            const btn = document.getElementById('connectBtn');
+            
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.close();
                 return;
             }
 
-            try {
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { name: 'NEUROPULSE' },
-                        { namePrefix: 'NEURO' }
-                    ],
-                    optionalServices: [SERVICE_UUID.toLowerCase()]
-                });
+            btn.innerText = "Connecting to WiFi...";
+            
+            // Connect to ESP32 Access Point IP
+            socket = new WebSocket('ws://192.168.4.1:81');
 
-                document.getElementById('connectBtn').innerText = "Linking...";
-                
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService(SERVICE_UUID.toLowerCase());
-                const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID.toLowerCase());
+            socket.onopen = () => {
+                btn.innerText = "WiFi Link Active";
+                btn.style.background = "#27ae60";
+                console.log("WebSocket Connected");
+            };
 
-                document.getElementById('connectBtn').innerText = "Link Active";
-                document.getElementById('connectBtn').style.background = "#27ae60";
-
-                await characteristic.startNotifications();
-                characteristic.addEventListener('characteristicvaluechanged', (e) => {
-                    const value = new TextDecoder().decode(e.target.value);
-                    if (value.startsWith('E')) {
-                        const num = parseInt(value.substring(1));
-                        if (!isNaN(num)) {
-                            ecgHistory.push(num);
-                            ecgHistory.shift();
-                            ecgChart.update('none');
-                            if (num > 3000) document.getElementById('bpmVal').innerHTML = Math.floor(Math.random() * (78 - 68) + 68) + ' <small style="font-size: 20px; font-weight: 400; color: #424245;">BPM</small>';
+            socket.onmessage = (event) => {
+                const value = event.data;
+                if (value === "!") {
+                    // Handle leads off alert
+                    console.warn("Leads Disconnected");
+                } else if (value.startsWith('E')) {
+                    const num = parseInt(value.substring(1));
+                    if (!isNaN(num)) {
+                        ecgHistory.push(num);
+                        ecgHistory.shift();
+                        ecgChart.update('none');
+                        
+                        // Simulated BPM logic
+                        if (num > 3000) {
+                            document.getElementById('bpmVal').innerHTML = 
+                                Math.floor(Math.random() * (78 - 68) + 68) + 
+                                ' <small style="font-size: 20px; font-weight: 400; color: #424245;">BPM</small>';
                         }
                     }
-                });
-            } catch (err) { console.error(err); }
+                }
+            };
+
+            socket.onclose = () => {
+                btn.innerText = "Connect to Band";
+                btn.style.background = "var(--apple-blue)";
+                console.log("WebSocket Disconnected");
+            };
+
+            socket.onerror = (error) => {
+                alert("Connection Failed! \n\n1. Connect your phone/laptop to 'NEUROPULSE_WIFI'\n2. Password is 'password123'\n3. Try clicking connect again.");
+                btn.innerText = "Retry Connection";
+                btn.style.background = "#e74c3c";
+            };
         });
 
         // Init Pie Chart
@@ -740,5 +752,6 @@
     </script>
 </body>
 </html>
+
 
 
