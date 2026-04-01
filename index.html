@@ -688,11 +688,22 @@
         });
 
         document.getElementById('connectBtn').addEventListener('click', async () => {
+            if (!navigator.bluetooth) {
+                alert("Bluetooth is blocked! \n\n1. Use Chrome or Edge browser.\n2. Ensure the link starts with https:// (GitHub Pages).\n3. Local files (file://) cannot use Bluetooth.");
+                return;
+            }
+
             try {
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
+                    filters: [
+                        { name: 'NEUROPULSE' },
+                        { namePrefix: 'NEURO' }
+                    ],
                     optionalServices: [SERVICE_UUID.toLowerCase()]
                 });
+
+                document.getElementById('connectBtn').innerText = "Linking...";
+                
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService(SERVICE_UUID.toLowerCase());
                 const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID.toLowerCase());
@@ -729,4 +740,5 @@
     </script>
 </body>
 </html>
+
 
